@@ -12,6 +12,7 @@ dist
 dist-ssr
 *.local
 database/*.json
+build/
 
 # Editor directories and files
 .vscode/*
