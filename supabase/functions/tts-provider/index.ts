@@ -1,46 +1,119 @@
-// Follow this setup guide to integrate the Deno language server with your editor:
-// https://deno.land/manual/getting_started/setup_your_environment
-// This enables autocomplete, go to definition, etc.
+// supabase/functions/tts-provider/index.ts
 
-// Setup type definitions for built-in Supabase Runtime APIs
-import "@supabase/functions-js/edge-runtime.d.ts";
-import { withSupabase } from "@supabase/server";
+const ELEVENLABS_API_KEY = Deno.env.get("ELEVENLABS_API_KEY");
+const ELEVENLABS_MODEL_ID = "eleven_multilingual_v2"; // fixed sesuai keputusanmu
 
-console.log("Hello from Functions!");
-
-// This endpoint uses 'publishable' | 'secret' access, apiKey is required.
-// Use publishable for Client-facing, key-validated endpoints
-// Use secret for Server-to-server, internal calls
-export default {
-  fetch: withSupabase({ auth: ["publishable", "secret"] }, async (req, ctx) => {
-    // Called by another service with a secret key
-    // ctx.supabaseAdmin bypasses RLS — use for privileged operations
-    /*
-    if (ctx.authMode === "secret") {
-      const { user_id } = await req.json();
-      const { data } = await ctx.supabaseAdmin.auth.admin.getUserById(user_id);
-
-      return Response.json({
-        email: data?.user?.email,
-      });
-    }
-    */
-
-    const { name } = await req.json();
-
-    return Response.json({
-      message: `Hello ${name}!`,
-    });
-  }),
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-/* To invoke locally:
+Deno.serve(async (req: Request) => {
+  // Browser selalu kirim preflight OPTIONS dulu sebelum POST — wajib di-handle
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
 
-  1. Run `supabase start` (see: https://supabase.com/docs/reference/cli/supabase-start)
-  2. Make an HTTP request:
+  try {
+    if (!ELEVENLABS_API_KEY) {
+      throw new Error(
+        "ELEVENLABS_API_KEY belum diset di environment Edge Function ini",
+      );
+    }
 
-  curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/tts-provider' \
-    --header 'apiKey: sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH' \
-    --data '{"name":"Functions"}'
+    const { text, voiceId } = await req.json();
 
-*/
+    if (!text || typeof text !== "string") {
+      return new Response(
+        JSON.stringify({ error: "Parameter 'text' wajib diisi" }),
+        {
+          status: 400,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json",
+          },
+        },
+      );
+    }
+
+    if (!voiceId || typeof voiceId !== "string") {
+      return new Response(
+        JSON.stringify({ error: "Parameter 'voiceId' wajib diisi" }),
+        {
+          status: 400,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json",
+          },
+        },
+      );
+    }
+
+    const elevenLabsResponse = await fetch(
+      `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "audio/mpeg",
+          "xi-api-key": ELEVENLABS_API_KEY,
+        },
+        body: JSON.stringify({
+          text,
+          model_id: ELEVENLABS_MODEL_ID,
+          voice_settings: {
+            stability: 0.5,
+            similarity_boost: 0.75,
+          },
+        }),
+      },
+    );
+
+    if (!elevenLabsResponse.ok) {
+      const errorBody = await elevenLabsResponse.text();
+      console.error(
+        "ElevenLabs error:",
+        elevenLabsResponse.status,
+        errorBody,
+      );
+
+      return new Response(
+        JSON.stringify({
+          error: "Gagal membuat audio dari ElevenLabs",
+          status: elevenLabsResponse.status,
+          detail: errorBody,
+        }),
+        {
+          status: elevenLabsResponse.status,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json",
+          },
+        },
+      );
+    }
+
+    const audioBuffer = await elevenLabsResponse.arrayBuffer();
+
+    return new Response(audioBuffer, {
+      status: 200,
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "application/octet-stream",
+      },
+    });
+  } catch (err) {
+    console.error("tts-provider error:", err);
+    return new Response(
+      JSON.stringify({
+        error: err instanceof Error ? err.message : "Internal Server Error",
+      }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
+  }
+});
