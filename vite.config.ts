@@ -23,8 +23,15 @@ export default defineConfig(({ mode }) => {
       // Optimize chunks
       rollupOptions: {
         output: {
-          manualChunks: {
-            vendor: ["vue", "vue-router"],
+          manualChunks(id) {
+            if (id.includes("node_modules")) {
+              if (
+                id.includes("/vue-router/") || id.includes("/vue/") ||
+                id.includes("/@vue/")
+              ) {
+                return "vendor";
+              }
+            }
           },
           entryFileNames: "assets/[name]-[hash].js",
           chunkFileNames: "assets/[name]-[hash].js",
