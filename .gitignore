@@ -24,6 +24,6 @@ build/
 *.njsproj
 *.sln
 *.sw?
-supabase/functions/.env.tts
+functions/.env.tts
 .env
 .env.local

@@ -1,9 +1,8 @@
 // File: src/data/modules/queueStore.ts
 
-import { ref, computed } from "vue";
+import { computed, ref } from "vue";
 import { supabase } from "../../services/supabaseClient";
-import { eventQueues, eventServices, currentEvent } from "./eventStore";
-import { mapQueue } from "./mappers";
+import { currentEvent, eventQueues, eventServices } from "./eventStore";
 import type { DbQueue, QueueState, Service } from "../types";
 
 // =========================================================
@@ -33,7 +32,7 @@ export const assignedService = computed<Service>(() => {
 });
 
 export const operatorQueue = computed(() =>
-  getQueueByServiceId(assignedService.value.id),
+  getQueueByServiceId(assignedService.value.id)
 );
 
 // =========================================================
@@ -59,8 +58,9 @@ export const getQueueStatusLabel = (status: "idle" | "serving" | "closed") => {
 export const getQueueStatusBadgeClass = (
   status: "idle" | "serving" | "closed",
 ) => {
-  if (status === "serving")
+  if (status === "serving") {
     return "border-green-200 bg-green-50 text-green-700";
+  }
   if (status === "closed") return "border-red-200 bg-red-50 text-red-700";
   return "border-gray-200 bg-gray-100 text-gray-600";
 };
