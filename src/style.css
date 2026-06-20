@@ -1,0 +1,45 @@
+@import "tailwindcss";
+
+@theme {
+  /* Kumpulan Warna */
+  --color-brand-primary: #ff4f00;
+  --color-brand-primary-hover: #e64700;
+  --color-brand-primary-light: #fff5f0;
+
+  --color-operator-primary: #3b82f6;
+  --color-operator-secondary: #60a5fa;
+
+  --color-canvas: #f9fafb;
+  --color-surface: #ffffff;
+
+  --color-border-subtle: #e5e7eb;
+  --color-text-main: #111827;
+  --color-text-muted: #4b5563;
+
+  /* KUMPULAN FONT BARU */
+  /* Menimpa font-sans bawaan Tailwind menjadi Inter */
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  /* Membuat utilitas baru: font-heading */
+  --font-heading: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Aturan Global (Base) */
+@layer base {
+  /* Secara otomatis menerapkan Space Grotesk ke semua tag judul */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-heading);
+  }
+}
+
+/* Utilitas Kustom (Components) */
+@layer utilities {
+  .tactile-btn {
+    @apply transition-all duration-150 active:scale-95;
+  }
+}

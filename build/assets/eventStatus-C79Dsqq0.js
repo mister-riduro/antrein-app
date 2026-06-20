@@ -1,0 +1,1 @@
+var e=e=>e===`live`?`Aktif`:e===`completed`?`Selesai`:`Draf`,t=e=>e===`live`?`bg-green-50 text-green-700 border-green-200`:e===`completed`?`bg-gray-100 text-gray-700 border-gray-200`:`bg-yellow-50 text-yellow-700 border-yellow-200`,n=e=>e===`live`?`bg-green-500`:e===`completed`?`bg-gray-500`:`bg-yellow-500`;export{n,e as r,t};
