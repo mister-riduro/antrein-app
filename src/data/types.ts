@@ -97,6 +97,19 @@ export type AddServicePayload = {
 export type TakeTicketResult =
   | "FULL"
   | {
-      formattedNumber: string;
-      ticket: Ticket;
-    };
+    formattedNumber: string;
+    ticket: Ticket;
+  };
+
+// Row yang dikembalikan RPC take_ticket dari database.
+// Harus sinkron dengan RETURNS TABLE di migration 002.
+export type RpcTakeTicketRow = {
+  id: number;
+  event_id: string;
+  service_id: number;
+  number: number;
+  uuid: string;
+  status: "waiting" | "called" | "served" | "skipped";
+  created_at: string;
+  service_prefix: string;
+};

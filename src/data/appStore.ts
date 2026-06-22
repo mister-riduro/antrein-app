@@ -1,67 +1,68 @@
 // File: src/data/appStore.ts
-import { ref, computed } from "vue";
+import { computed, ref } from "vue";
 import { supabase } from "../services/supabaseClient";
 import { organizerApi } from "../services/organizerApi";
 import type {
+  DbQueue,
+  DbService,
+  DbTicket,
   EventInfo,
   EventStatus,
   OperatorStatus,
   OrganizerAccount,
   QueueState,
   QuotaType,
+  RpcTakeTicketRow,
   Service,
   ServicePointConfig,
-  Ticket,
-  DbQueue,
-  DbService,
-  DbTicket,
   TakeTicketResult,
+  Ticket,
 } from "./types";
 
 import { organizerAccount, servicePointConfig } from "./modules/accountStore";
-import { currentEvent, eventServices, eventQueues } from "./modules/eventStore";
+import { currentEvent, eventQueues, eventServices } from "./modules/eventStore";
 import {
   getInitials,
-  mapService,
   mapQueue,
+  mapService,
   mapTicket,
 } from "./modules/mappers";
 import {
   addServiceToEvent,
-  updateService,
   deleteService,
+  updateService,
 } from "./modules/serviceStore";
 // Re-export agar semua component tidak perlu ubah import path
-export { addServiceToEvent, updateService, deleteService };
+export { addServiceToEvent, deleteService, updateService };
 
 import {
-  selectedServiceId,
   assignedService,
-  operatorQueue,
+  callNextNumber,
+  closeCounter,
+  finishServingNumber,
   getQueueByServiceId,
-  getQueueStatusLabel,
   getQueueStatusBadgeClass,
   getQueueStatusDotClass,
-  callNextNumber,
-  finishServingNumber,
-  closeCounter,
+  getQueueStatusLabel,
   openCounter,
+  operatorQueue,
   recallNumber,
+  selectedServiceId,
   skipServingNumber,
 } from "./modules/queueStore";
 export {
-  selectedServiceId,
   assignedService,
-  operatorQueue,
+  callNextNumber,
+  closeCounter,
+  finishServingNumber,
   getQueueByServiceId,
-  getQueueStatusLabel,
   getQueueStatusBadgeClass,
   getQueueStatusDotClass,
-  callNextNumber,
-  finishServingNumber,
-  closeCounter,
+  getQueueStatusLabel,
   openCounter,
+  operatorQueue,
   recallNumber,
+  selectedServiceId,
   skipServingNumber,
 };
 
@@ -88,11 +89,11 @@ export const servicePointName = computed({
   },
 });
 export {
+  currentEvent,
+  eventQueues,
+  eventServices,
   organizerAccount,
   servicePointConfig,
-  currentEvent,
-  eventServices,
-  eventQueues,
 };
 
 export const isStateInitialized = ref(false);
@@ -224,8 +225,8 @@ export const initSyncChannel = (
           (q) => q.serviceId === newServiceId,
         );
         if (qIdx !== -1) {
-          eventQueues.value[qIdx].currentNumber =
-            freshQueue.current_number || 0;
+          eventQueues.value[qIdx].currentNumber = freshQueue.current_number ||
+            0;
           eventQueues.value[qIdx].status = freshQueue.status || "idle";
           eventQueues.value[qIdx].totalWaiting = freshQueue.total_waiting || 0;
         } else {
@@ -528,8 +529,8 @@ export const updateCurrentEvent = async (eventPayload: Partial<EventInfo>) => {
     .from("events")
     .update({
       title: eventPayload.title ?? currentEvent.value.title,
-      description:
-        eventPayload.description ?? currentEvent.value.description ?? "",
+      description: eventPayload.description ?? currentEvent.value.description ??
+        "",
       date: eventPayload.date ?? currentEvent.value.date,
       status: eventPayload.status ?? currentEvent.value.status,
     })
@@ -584,64 +585,22 @@ export const takeTicket = async (
   eventId: string,
   serviceId: number,
 ): Promise<TakeTicketResult> => {
-  const { data: serviceData, error: serviceError } = await supabase
-    .from("services")
-    .select("*")
-    .eq("id", serviceId)
-    .single();
-  if (serviceError) throw serviceError;
+  // Satu RPC call menggantikan 5-6 query sequential sebelumnya.
+  // Semua logika (cek kuota, increment nomor, insert tiket, update queue)
+  // berjalan dalam satu transaksi atomic di PostgreSQL — bebas race condition.
+  const { data, error } = await supabase.rpc("take_ticket", {
+    p_event_id: eventId,
+    p_service_id: serviceId,
+  });
 
-  if (serviceData.quota_type === "limited") {
-    const { count } = await supabase
-      .from("tickets")
-      .select("*", { count: "exact", head: true })
-      .eq("event_id", eventId)
-      .eq("service_id", serviceId);
-    if (count !== null && count >= serviceData.quota_limit) return "FULL";
-  }
+  if (error) throw error;
 
-  const { data: lastTicket } = await supabase
-    .from("tickets")
-    .select("number")
-    .eq("event_id", eventId)
-    .eq("service_id", serviceId)
-    .order("number", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  const nextNumber = (lastTicket?.number || 0) + 1;
+  // RPC mengembalikan array kosong jika kuota penuh
+  if (!data || (data as RpcTakeTicketRow[]).length === 0) return "FULL";
 
-  const newUuid =
-    typeof crypto !== "undefined" && crypto.randomUUID
-      ? crypto.randomUUID()
-      : Math.random().toString(36).substring(2, 15) +
-        Math.random().toString(36).substring(2, 15);
+  const row = (data as RpcTakeTicketRow[])[0];
 
-  const { data: ticketData, error: ticketError } = await supabase
-    .from("tickets")
-    .insert({
-      event_id: eventId,
-      service_id: serviceId,
-      number: nextNumber,
-      uuid: newUuid,
-      status: "waiting", // ← eksplisit set default
-    })
-    .select()
-    .single();
-
-  if (ticketError) throw ticketError;
-
-  const { data: queueData } = await supabase
-    .from("queues")
-    .select("*")
-    .eq("service_id", serviceId)
-    .single();
-  const { error: queueUpdateError } = await supabase
-    .from("queues")
-    .update({ total_waiting: (queueData.total_waiting || 0) + 1 })
-    .eq("service_id", serviceId);
-
-  if (queueUpdateError) throw queueUpdateError;
-
+  // Update local state agar UI reaktif tanpa menunggu realtime
   const queueIndex = eventQueues.value.findIndex(
     (queue) => queue.serviceId === serviceId,
   );
@@ -662,16 +621,23 @@ export const takeTicket = async (
     };
   }
 
-  const ticket = mapTicket(ticketData as DbTicket);
-  const servicePrefix =
-    eventServices.value.find((service) => service.id === serviceId)?.prefix ||
-    serviceData.prefix;
+  const ticket = mapTicket({
+    id: row.id,
+    event_id: row.event_id,
+    service_id: row.service_id,
+    number: row.number,
+    uuid: row.uuid,
+    status: row.status,
+    created_at: row.created_at,
+  } as DbTicket);
 
   return {
     ticket,
-    formattedNumber: `${servicePrefix}-${ticket.yourNumber
-      .toString()
-      .padStart(3, "0")}`,
+    formattedNumber: `${row.service_prefix}-${
+      ticket.yourNumber
+        .toString()
+        .padStart(3, "0")
+    }`,
   };
 };
 
