@@ -76,11 +76,23 @@ export const getQueueStatusDotClass = (
 // =========================================================
 // OPERATOR ACTIONS
 // =========================================================
+
+// Guard: mencegah operator spam-klik saat action sedang diproses.
+// Satu flag per-action — "call-next" tidak memblokir "finish", dll.
+const actionInFlight = ref<Record<string, boolean>>({});
+
+export const isActionLoading = (
+  action: "call-next" | "finish" | "close" | "open" | "recall" | "skip",
+) => actionInFlight.value[action] === true;
+
 const postQueueAction = async (
   serviceId: number,
   action: "call-next" | "finish" | "close" | "open" | "recall" | "skip",
 ) => {
   if (!serviceId) throw new Error("Layanan belum dipilih");
+  if (actionInFlight.value[action]) return; // Sudah ada yang jalan, abaikan
+
+  actionInFlight.value[action] = true;
 
   const { data: queueData, error: queueError } = await supabase
     .from("queues")
@@ -176,30 +188,35 @@ const postQueueAction = async (
     updatedQueue.status = "idle";
   }
 
-  const { error: updateError } = await supabase
-    .from("queues")
-    .update({
-      current_number: updatedQueue.current_number,
-      total_waiting: updatedQueue.total_waiting,
-      status: updatedQueue.status,
-    })
-    .eq("service_id", serviceId);
+  try {
+    const { error: updateError } = await supabase
+      .from("queues")
+      .update({
+        current_number: updatedQueue.current_number,
+        total_waiting: updatedQueue.total_waiting,
+        status: updatedQueue.status,
+      })
+      .eq("service_id", serviceId);
 
-  if (updateError) throw updateError;
+    if (updateError) throw updateError;
 
-  const queueIndex = eventQueues.value.findIndex(
-    (q) => q.serviceId === serviceId,
-  );
-  if (queueIndex !== -1) {
-    eventQueues.value[queueIndex] = {
-      ...eventQueues.value[queueIndex],
-      currentNumber: updatedQueue.current_number ?? 0,
-      status: updatedQueue.status ?? "idle",
-      totalWaiting: updatedQueue.total_waiting ?? 0,
-    };
+    const queueIndex = eventQueues.value.findIndex(
+      (q) => q.serviceId === serviceId,
+    );
+    if (queueIndex !== -1) {
+      eventQueues.value[queueIndex] = {
+        ...eventQueues.value[queueIndex],
+        currentNumber: updatedQueue.current_number ?? 0,
+        status: updatedQueue.status ?? "idle",
+        totalWaiting: updatedQueue.total_waiting ?? 0,
+      };
+    }
+
+    return updatedQueue;
+  } finally {
+    // Selalu reset flag — baik sukses maupun error
+    actionInFlight.value[action] = false;
   }
-
-  return updatedQueue;
 };
 
 export const callNextNumber = (serviceId = assignedService.value.id) =>

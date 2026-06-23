@@ -153,9 +153,12 @@ export async function loadOrganizerState(forceRefresh = false) {
     try {
       isBackgroundLoading.value = true;
 
-      const accountData = await organizerApi.getAccount(user.id);
-      const configData = await organizerApi.getConfig(user.id);
-      const latestEventData = await organizerApi.getLatestEvent(user.id);
+      // Tiga call ini tidak saling bergantung — jalankan paralel
+      const [accountData, configData, latestEventData] = await Promise.all([
+        organizerApi.getAccount(user.id),
+        organizerApi.getConfig(user.id),
+        organizerApi.getLatestEvent(user.id),
+      ]);
 
       const safeAccountData = accountData || {
         id: user.id,
@@ -684,15 +687,18 @@ export const takeTicket = async (
 };
 
 export const loadPublicTicket = async (ticketUuid: string): Promise<Ticket> => {
-  const { data: ticketData, error: ticketError } = await supabase
-    .from("tickets")
-    .select("*")
-    .eq("uuid", ticketUuid)
-    .single();
-  if (ticketError) throw ticketError;
+  // Pakai RPC bukan direct table query — anon tidak bisa dump semua tiket
+  const { data, error } = await supabase.rpc("get_ticket_by_uuid", {
+    p_uuid: ticketUuid,
+  });
+  if (error) throw error;
+  if (!data || (data as DbTicket[]).length === 0) {
+    throw new Error("Tiket tidak ditemukan");
+  }
 
+  const ticketData = (data as DbTicket[])[0];
   await loadPublicEvent(ticketData.event_id);
-  const ticket = mapTicket(ticketData as DbTicket);
+  const ticket = mapTicket(ticketData);
   activeTicket.value = ticket;
   return ticket;
 };
@@ -707,16 +713,18 @@ export const checkActiveTickets = async (
   const uuidList = Object.values(uuids);
   if (uuidList.length === 0) return {};
 
-  const { data } = await supabase
-    .from("tickets")
-    .select("uuid, status")
-    .in("uuid", uuidList);
+  // Pakai RPC bukan direct table query
+  const { data } = await supabase.rpc("check_tickets_by_uuids", {
+    p_uuids: uuidList,
+  });
 
   const active: Record<number, string> = {};
 
   for (const [serviceIdStr, ticketUuid] of Object.entries(uuids)) {
     const serviceId = Number(serviceIdStr);
-    const found = data?.find((t) => t.uuid === ticketUuid);
+    const found = (data as { uuid: string; status: string }[] | null)?.find(
+      (t) => t.uuid === ticketUuid,
+    );
 
     // Tiket dianggap masih aktif jika waiting atau sudah dipanggil
     if (found?.status === "waiting" || found?.status === "called") {
