@@ -13,6 +13,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { useSidebar } from "../../composables/useSidebar";
 import { useAuth } from "../../composables/useAuth";
+import ConfirmationDialog from "./ConfirmationDialog.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -22,9 +23,14 @@ const { logout } = useAuth();
 const isActive = (path: string) => route.path.startsWith(path);
 
 const isLoggingOut = ref(false);
+const showLogoutConfirm = ref(false);
 
-const handleLogout = async () => {
-  if (isLoggingOut.value) return;
+const handleLogout = () => {
+  showLogoutConfirm.value = true;
+};
+
+const confirmLogout = async () => {
+  showLogoutConfirm.value = false;
   isLoggingOut.value = true;
   try {
     await logout();
@@ -207,4 +213,15 @@ const handleLogout = async () => {
       </button>
     </div>
   </aside>
+
+  <ConfirmationDialog
+    :is-open="showLogoutConfirm"
+    variant="danger"
+    title="Keluar dari AntreIn?"
+    description="Kamu akan keluar dari sesi ini. Pastikan semua kegiatan sudah selesai atau ditangani operator lain sebelum keluar."
+    confirm-label="Ya, Keluar"
+    cancel-label="Batal"
+    @close="showLogoutConfirm = false"
+    @confirm="confirmLogout"
+  />
 </template>
