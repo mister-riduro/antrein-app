@@ -56,8 +56,8 @@ const getInitials = (name: string, fallbackEmail: string) => {
 const mapUserProfile = (userProfile: UserProfile): AuthUser => ({
   email: userProfile.email,
   id: userProfile.id,
-  initials:
-    userProfile.initials || getInitials(userProfile.name || "", userProfile.email),
+  initials: userProfile.initials ||
+    getInitials(userProfile.name || "", userProfile.email),
   name: userProfile.name || "",
   organization: userProfile.organization || "",
   phone: userProfile.phone || "",
@@ -237,6 +237,10 @@ const register = async (payload: RegisterPayload): Promise<RegisterResult> => {
 const logout = async () => {
   const { error } = await supabase.auth.signOut();
   if (error) throw new Error(error.message);
+  // Reset semua state organizer (event, queues, account, realtime channels)
+  // sebelum clear user — supaya tidak ada data lama tersisa
+  const { resetOrganizerState } = await import("../data/appStore");
+  resetOrganizerState();
   setUser(null);
   isInitialized.value = true;
 };

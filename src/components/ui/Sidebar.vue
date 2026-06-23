@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { useRoute } from "vue-router";
+import { ref } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { HugeiconsIcon } from "@hugeicons/vue";
 import {
   Layers01Icon,
@@ -8,13 +9,32 @@ import {
   UserGroupIcon,
   UserAccountIcon,
   Settings01Icon,
+  Logout01Icon,
 } from "@hugeicons/core-free-icons";
 import { useSidebar } from "../../composables/useSidebar";
+import { useAuth } from "../../composables/useAuth";
 
 const route = useRoute();
+const router = useRouter();
 const { isCollapsed } = useSidebar();
+const { logout } = useAuth();
 
 const isActive = (path: string) => route.path.startsWith(path);
+
+const isLoggingOut = ref(false);
+
+const handleLogout = async () => {
+  if (isLoggingOut.value) return;
+  isLoggingOut.value = true;
+  try {
+    await logout();
+    await router.push({ name: "Login" });
+  } catch (err) {
+    console.error("Logout gagal:", err);
+  } finally {
+    isLoggingOut.value = false;
+  }
+};
 </script>
 
 <template>
@@ -164,6 +184,27 @@ const isActive = (path: string) => route.path.startsWith(path);
         />
         <span v-if="!isCollapsed">Pengaturan</span>
       </router-link>
+
+      <!-- Keluar -->
+      <button
+        type="button"
+        title="Keluar"
+        :disabled="isLoggingOut"
+        class="w-full flex items-center rounded-md transition-colors text-sm font-medium text-red-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-50 disabled:cursor-not-allowed"
+        :class="isCollapsed ? 'justify-center p-2.5' : 'gap-3 px-3 py-2'"
+        @click="handleLogout"
+      >
+        <HugeiconsIcon
+          :icon="Logout01Icon"
+          :size="20"
+          :stroke-width="2"
+          class="shrink-0"
+          :class="{ 'animate-pulse': isLoggingOut }"
+        />
+        <span v-if="!isCollapsed">
+          {{ isLoggingOut ? "Keluar..." : "Keluar" }}
+        </span>
+      </button>
     </div>
   </aside>
 </template>

@@ -99,6 +99,48 @@ export {
 export const isStateInitialized = ref(false);
 export const isBackgroundLoading = ref(false);
 
+// Dipanggil saat logout agar state organizer tidak bocor ke session berikutnya.
+// Supabase channel juga di-unsubscribe supaya tidak ada listener liar setelah logout.
+export const resetOrganizerState = () => {
+  // Cabut semua realtime subscription aktif
+  if (syncChannel) {
+    void supabase.removeChannel(syncChannel);
+    syncChannel = null;
+  }
+  if (eventTicketSubscription) {
+    void supabase.removeChannel(eventTicketSubscription);
+    eventTicketSubscription = null;
+  }
+  activeFetchPromise = null;
+
+  // Reset account
+  organizerAccount.value = {
+    id: "",
+    email: "",
+    name: "",
+    initials: "A",
+    phone: "",
+    organization: "",
+    role: "",
+  };
+  servicePointConfig.value = { identifier: "1", label: "Loket" };
+
+  // Reset event
+  currentEvent.value = {
+    id: "",
+    title: "",
+    description: "",
+    date: "",
+    status: "draft",
+  };
+  eventServices.value = [];
+  eventQueues.value = [];
+
+  // Reset flags
+  isStateInitialized.value = false;
+  isBackgroundLoading.value = false;
+};
+
 export async function loadOrganizerState(forceRefresh = false) {
   const {
     data: { user },
