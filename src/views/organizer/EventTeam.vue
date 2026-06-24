@@ -261,7 +261,6 @@ const form = ref({
 
 // 1. Fetch daftar Event saat halaman dimuat
 // Ambil fungsi 'error' dari useToast milikmu
-const { error: showError } = useToast();
 
 // States (Tetap simpan tipe datanya secara strict seperti ini ya)
 interface EventItem {
@@ -283,7 +282,7 @@ const fetchEvents = async () => {
     console.error("Gagal mengambil event:", err);
 
     // Gunakan fungsi error bawaan dari useToast kamu
-    showError("Gagal memuat kegiatan", "Periksa koneksi internet Anda.");
+    toast.error("Gagal memuat kegiatan", "Periksa koneksi internet Anda.");
   }
 };
 
@@ -394,7 +393,7 @@ const copyShareLink = async (code: string) => {
   if (navigator.clipboard && window.isSecureContext) {
     try {
       await navigator.clipboard.writeText(url);
-      showError("Berhasil", "Link berhasil disalin ke clipboard."); // Ganti dengan toast.success milikmu jika ada
+      toast.success("Berhasil", "Link berhasil disalin ke clipboard."); // Ganti dengan toast.success milikmu jika ada
       return;
     } catch (err) {
       console.error("Gagal menyalin:", err);
