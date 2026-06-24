@@ -111,12 +111,6 @@
                 >
                   {{ assignment.services.name }}
                 </span>
-                <!-- <span
-                  v-else
-                  class="bg-gray-100 text-gray-600 px-2.5 py-1 rounded-md text-xs font-semibold"
-                >
-                  Semua Layanan
-                </span> -->
               </td>
               <td class="p-4 text-text-muted">
                 {{ formatDate(assignment.expires_at) }}
@@ -187,7 +181,7 @@
               v-model="form.serviceId"
               class="w-full px-4 py-2.5 bg-surface border border-border-subtle rounded-xl text-sm focus:ring-2 focus:ring-brand-primary focus:border-brand-primary outline-none transition-all"
             >
-              <!-- <option :value="null">Semua Layanan (Akses Penuh)</option> -->
+              <option value="" disabled>— Pilih Layanan —</option>
               <option
                 v-for="service in availableServices"
                 :key="service.id"
@@ -226,7 +220,7 @@
             </button>
             <button
               type="submit"
-              :disabled="isSubmitting"
+              :disabled="isSubmitting || form.serviceId === ''"
               class="bg-brand-primary hover:bg-brand-primary-hover text-white font-semibold px-6 py-2.5 rounded-xl text-sm disabled:opacity-50 transition-colors tactile-btn shadow-sm"
             >
               {{ isSubmitting ? "Memproses..." : "Generate Kode" }}
@@ -253,7 +247,7 @@ const availableServices = ref<any[]>([]);
 const showCreateModal = ref(false);
 const isSubmitting = ref(false);
 const form = ref({
-  serviceId: null as number | null,
+  serviceId: "" as number | null | "",
   expiresAt: "",
 });
 
@@ -298,7 +292,7 @@ const handleEventChange = async () => {
   // Reset form dan data tabel
   assignments.value = [];
   availableServices.value = [];
-  form.value.serviceId = null;
+  form.value.serviceId = "";
 
   // Ambil layanan (services) yang terhubung ke event ini
   const { data: services } = await supabase
@@ -347,7 +341,7 @@ const createAssignment = async () => {
     if (error) throw error;
 
     showCreateModal.value = false;
-    form.value.serviceId = null;
+    form.value.serviceId = "";
     form.value.expiresAt = "";
 
     // Refresh tabel

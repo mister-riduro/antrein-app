@@ -20,18 +20,26 @@ export const teamApi = {
 
         if (error) throw new Error(error.message);
 
-        // RPC mengembalikan assignment_id, service_id, dan expires_at
-        // Kita generate token session baru di sini atau di RPC (sesuai setup awalmu)
+        // RPC can return either a single row object or an array (TABLE/SETOF).
+        // Normalize to a single row object.
+        const row = Array.isArray(data) ? data[0] : data;
+
+        if (!row || !row.assignment_id) {
+            throw new Error("Kode akses tidak valid atau tidak ditemukan.");
+        }
+
         const session_token = generateUUID();
 
-        // Jangan lupa upsert session ke tabel operator_sessions agar Realtime jalan
-        await supabase.from("operator_sessions").upsert({
-            assignment_id: data.assignment_id,
+        // Upsert session ke tabel operator_sessions agar Realtime jalan
+        const { error: upsertError } = await supabase.from("operator_sessions").upsert({
+            assignment_id: row.assignment_id,
             session_token: session_token,
             device_hint: navigator.userAgent.substring(0, 50),
             last_active: new Date().toISOString(),
         }, { onConflict: "assignment_id" });
 
-        return { ...data, session_token };
+        if (upsertError) throw new Error(upsertError.message);
+
+        return { ...row, session_token };
     },
 };
