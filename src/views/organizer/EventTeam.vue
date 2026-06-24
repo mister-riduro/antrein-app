@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-6 p-6 max-w-6xl mx-auto">
+  <div class="space-y-6 max-w-6xl mx-auto">
     <div
       class="bg-white p-6 rounded-2xl shadow-sm border border-border-subtle flex flex-col md:flex-row md:items-center justify-between gap-4"
     >
