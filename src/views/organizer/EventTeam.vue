@@ -111,12 +111,12 @@
                 >
                   {{ assignment.services.name }}
                 </span>
-                <span
+                <!-- <span
                   v-else
                   class="bg-gray-100 text-gray-600 px-2.5 py-1 rounded-md text-xs font-semibold"
                 >
                   Semua Layanan
-                </span>
+                </span> -->
               </td>
               <td class="p-4 text-text-muted">
                 {{ formatDate(assignment.expires_at) }}
@@ -187,7 +187,7 @@
               v-model="form.serviceId"
               class="w-full px-4 py-2.5 bg-surface border border-border-subtle rounded-xl text-sm focus:ring-2 focus:ring-brand-primary focus:border-brand-primary outline-none transition-all"
             >
-              <option :value="null">Semua Layanan (Akses Penuh)</option>
+              <!-- <option :value="null">Semua Layanan (Akses Penuh)</option> -->
               <option
                 v-for="service in availableServices"
                 :key="service.id"
