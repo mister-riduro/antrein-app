@@ -4,6 +4,7 @@ import { HugeiconsIcon } from "@hugeicons/vue";
 import { Notification02Icon } from "@hugeicons/core-free-icons";
 import { supabase } from "../../services/supabaseClient";
 import { useIndonesianTts } from "../../composables/useIndonesianTts";
+import { createAnnouncementStatusPublisher } from "../../composables/useAnnouncementStatus";
 
 // Impor state reaktif dari store aplikasi
 import {
@@ -22,6 +23,7 @@ import {
 import type { QueueState } from "../../data/appStore";
 
 type QueuedAnnouncement = {
+  currentNumber: number;
   serviceId: number;
   text: string;
 };
@@ -38,6 +40,7 @@ let unsubscribeConfig: (() => void) | null = null;
 const announcementQueue = ref<QueuedAnnouncement[]>([]);
 const isAnnouncementPlaying = ref(false);
 const { speakAsync, stop } = useIndonesianTts();
+const announcementStatus = createAnnouncementStatusPublisher();
 
 const subscribeToActiveService = (userId: string) => {
   const channel = supabase
@@ -96,6 +99,7 @@ const buildAnnouncement = (queue: QueueState): QueuedAnnouncement | null => {
   if (!service) return null;
 
   return {
+    currentNumber: queue.currentNumber,
     serviceId: queue.serviceId,
     text: [
       `Nomor antrean ${service.prefix} ${queue.currentNumber}.`,
@@ -137,7 +141,17 @@ const playNextAnnouncement = async () => {
   activeDisplayServiceId.value = nextAnnouncement.serviceId;
 
   try {
-    await speakAsync(nextAnnouncement.text);
+    const didPlay = await speakAsync(nextAnnouncement.text);
+    await announcementStatus.publish({
+      currentNumber: nextAnnouncement.currentNumber,
+      message: didPlay
+        ? undefined
+        : "Public Display tidak berhasil memutar suara. Periksa pengaturan audio, izin autoplay, atau koneksi TTS.",
+      serviceId: nextAnnouncement.serviceId,
+      status: didPlay ? "completed" : "failed",
+    });
+  } catch (error) {
+    console.error("Gagal mengirim status suara Public Display:", error);
   } finally {
     if (announcementQueue.value.length > 0) {
       await waitForNextAnnouncementSlot();
@@ -213,6 +227,7 @@ onUnmounted(() => {
   clearInterval(timer);
   stop();
   clearAnnouncementGap();
+  announcementStatus.cleanup();
   announcementQueue.value = [];
   unsubscribeQueues?.();
   unsubscribeConfig?.();

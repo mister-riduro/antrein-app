@@ -38,6 +38,7 @@ import {
   subscribeToAllEventTickets,
 } from "../../data/appStore.ts";
 import { useToast } from "../../composables/useToast.ts";
+import { useAnnouncementDiagnostics } from "../../composables/useAnnouncementDiagnostics.ts";
 import ConfirmationDialog from "../../components/ui/ConfirmationDialog.vue";
 
 const route = useRoute();
@@ -58,6 +59,23 @@ const activeServiceName = computed(
   () => activeService.value?.name || assignedService.value.name,
 );
 const activeQueue = computed(() => getQueueByServiceId(activeServiceId.value));
+const formatAnnouncementNumber = ({
+  currentNumber,
+  serviceId,
+}: {
+  currentNumber: number;
+  serviceId: number;
+}) => {
+  const service = eventServices.value.find((item) => item.id === serviceId);
+  const prefix = service?.prefix || activeService.value?.prefix || "";
+  const paddedNumber = currentNumber.toString().padStart(3, "0");
+
+  return prefix ? `${prefix}-${paddedNumber}` : paddedNumber;
+};
+const {
+  subscribeToService: subscribeToAnnouncementService,
+  trackAnnouncement,
+} = useAnnouncementDiagnostics(formatAnnouncementNumber);
 const isActiveQueueClosed = computed(
   () => activeQueue.value.status === "closed",
 );
@@ -81,6 +99,10 @@ let unsubscribeAllTickets: (() => void) | null = null;
 
 onMounted(async () => {
   await loadOrganizerState();
+  eventServices.value.forEach((service) => {
+    subscribeToAnnouncementService(service.id);
+  });
+
   if (activeServiceId.value) {
     unsubscribeFns.push(subscribeToServiceQueue(activeServiceId.value));
     // unsubscribeFns.push(subscribeToTicketInserts(activeServiceId.value));
@@ -115,6 +137,7 @@ const handleCallNextNumber = async () => {
   try {
     isProcessing.value = true; // Kunci tombol
     await callNextNumber(activeServiceId.value);
+    trackAnnouncement(activeServiceId.value, activeQueue.value.currentNumber);
   } finally {
     isProcessing.value = false; // Buka kembali tombol
   }
@@ -126,6 +149,7 @@ const handleRecallNumber = async () => {
   try {
     isProcessing.value = true;
     await recallNumber(activeServiceId.value);
+    trackAnnouncement(activeServiceId.value, activeQueue.value.currentNumber);
   } finally {
     isProcessing.value = false;
   }

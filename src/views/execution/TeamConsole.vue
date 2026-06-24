@@ -224,6 +224,7 @@ import {
   getQueueStatusLabel,
   getQueueStatusDotClass,
 } from "../../data/appStore";
+import { useAnnouncementDiagnostics } from "../../composables/useAnnouncementDiagnostics";
 
 const router = useRouter();
 const toast = useToast();
@@ -243,6 +244,19 @@ const isOnline = ref(navigator.onLine);
 const isSessionKicked = ref(false);
 const isSessionRevoked = ref(false);
 const isExpired = ref(false);
+const formatAnnouncementNumber = ({
+  currentNumber,
+}: {
+  currentNumber: number;
+  serviceId: number;
+}) => {
+  const paddedNumber = currentNumber.toString().padStart(3, "0");
+  return servicePrefix.value ? `${servicePrefix.value}-${paddedNumber}` : paddedNumber;
+};
+const {
+  subscribeToService: subscribeToAnnouncementService,
+  trackAnnouncement,
+} = useAnnouncementDiagnostics(formatAnnouncementNumber);
 
 let realtimeChannel: any;
 let assignmentChannel: any;
@@ -276,6 +290,7 @@ const handleCallNextNumber = async () => {
   try {
     isProcessing.value = true;
     await callNextNumber(sessionData.serviceId);
+    trackAnnouncement(sessionData.serviceId, activeQueue.value.currentNumber);
   } catch (err) {
     console.error(err);
     toast.error(
@@ -292,6 +307,7 @@ const handleRecallNumber = async () => {
   try {
     isProcessing.value = true;
     await recallNumber(sessionData.serviceId);
+    trackAnnouncement(sessionData.serviceId, activeQueue.value.currentNumber);
   } finally {
     isProcessing.value = false;
   }
@@ -383,6 +399,7 @@ onMounted(async () => {
   }
 
   await fetchServiceDetails();
+  subscribeToAnnouncementService(sessionData.serviceId);
 
   // Berlangganan data antrean dari store
   unsubscribeQueue = subscribeToServiceQueue(sessionData.serviceId);
