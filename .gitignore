@@ -27,3 +27,8 @@ build/
 supabase/functions/.env.tts
 .env
 .env.local
+docs/supabase-schema-complete.sql
+
+
+#add .tmp to .gitignore
+.tmp

@@ -1,8 +1,12 @@
-import { createRouter, createWebHistory } from "vue-router";
+import {
+  createRouter,
+  createWebHistory,
+  type RouteRecordRaw,
+} from "vue-router";
 import { useAuth } from "../composables/useAuth";
 import { loadOrganizerState } from "../data/appStore";
 
-const routes = [
+const routes: Array<RouteRecordRaw> = [
   // ==========================================
   // AREA PUBLIK & AUTENTIKASI
   // ==========================================
@@ -62,6 +66,13 @@ const routes = [
         name: "Account",
         component: () => import("../views/organizer/Account.vue"),
       },
+
+      {
+        path: "/team",
+        name: "TeamManagement",
+        component: () => import("../views/organizer/EventTeam.vue"),
+        // Pastikan ada auth guard jika diperlukan
+      },
     ],
   },
 
@@ -80,6 +91,35 @@ const routes = [
     name: "PublicDisplay",
     meta: { requiresAuth: true },
     component: () => import("../views/execution/PublicDisplay.vue"), // Sesuai FR-5.1
+  },
+
+  // ==========================================
+  // AREA TIM (LOGIN & CONSOLE)
+  // ==========================================
+  {
+    path: "/team/login",
+    name: "TeamLogin",
+    component: () => import("../views/public/TeamLogin.vue"),
+    meta: { requiresAuth: false },
+  },
+  {
+    path: "/team/console",
+    name: "TeamConsole",
+    component: () => import("../views/execution/TeamConsole.vue"),
+    // Pelindung rute khusus untuk konsol tim
+    beforeEnter: (_to, _from, next) => {
+      // Cek apakah ada token di tab session ini
+      const hasSession = sessionStorage.getItem("team_session_token");
+      const hasAssignment = sessionStorage.getItem("team_assignment_id");
+
+      if (!hasSession || !hasAssignment) {
+        // Jika tidak ada token, kembalikan ke halaman input kode
+        next({ name: "TeamLogin" });
+      } else {
+        // Jika ada, izinkan masuk ke halaman console
+        next();
+      }
+    },
   },
 
   // ==========================================

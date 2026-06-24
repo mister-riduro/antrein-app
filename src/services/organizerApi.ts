@@ -48,3 +48,15 @@ export const organizerApi = {
     };
   },
 };
+
+export const getEventsForDropdown = async () => {
+  const { data, error } = await supabase
+    .from("events")
+    .select("id, title")
+    .order("created_at", { ascending: false });
+
+  // Jika error, lemparkan agar bisa ditangkap oleh komponen Vue
+  if (error) throw error;
+
+  return data;
+};
