@@ -224,11 +224,9 @@ import {
   getQueueStatusLabel,
   getQueueStatusDotClass,
 } from "../../data/appStore";
-import { useIndonesianTts } from "../../composables/useIndonesianTts";
 
 const router = useRouter();
 const toast = useToast();
-const { speak, stop } = useIndonesianTts();
 
 const sessionData = {
   token: sessionStorage.getItem("team_session_token"),
@@ -272,27 +270,12 @@ const fetchServiceDetails = async () => {
   }
 };
 
-// Fitur Pengumuman Suara (TTS)
-const buildAnnouncementText = () => {
-  return [
-    `Nomor antrean, ${servicePrefix.value}, ${activeQueue.value.currentNumber}.`,
-    `Silakan menuju loket.`,
-    `Layanan ${serviceName.value}.`,
-  ].join(" ");
-};
-
-const announceCurrentNumber = () => {
-  stop();
-  speak(buildAnnouncementText());
-};
-
 // Handlers (Sama persis dengan OperatorConsole)
 const handleCallNextNumber = async () => {
   if (isProcessing.value || activeQueue.value?.status === "closed") return;
   try {
     isProcessing.value = true;
     await callNextNumber(sessionData.serviceId);
-    announceCurrentNumber();
   } catch (err) {
     console.error(err);
     toast.error(
@@ -309,7 +292,6 @@ const handleRecallNumber = async () => {
   try {
     isProcessing.value = true;
     await recallNumber(sessionData.serviceId);
-    announceCurrentNumber();
   } finally {
     isProcessing.value = false;
   }
@@ -319,7 +301,6 @@ const handleFinishServingNumber = async () => {
   if (isProcessing.value) return;
   try {
     isProcessing.value = true;
-    stop();
     await finishServingNumber(sessionData.serviceId);
     toast.success(
       "Selesai",
@@ -337,7 +318,6 @@ const handleSkipNumber = async () => {
   if (isProcessing.value) return;
   try {
     isProcessing.value = true;
-    stop();
     await skipServingNumber(sessionData.serviceId);
     toast.success(
       "Dilewati",

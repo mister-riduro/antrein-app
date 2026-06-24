@@ -3,6 +3,7 @@ import { computed, ref, onMounted, onUnmounted } from "vue";
 import { HugeiconsIcon } from "@hugeicons/vue";
 import { Notification02Icon } from "@hugeicons/core-free-icons";
 import { supabase } from "../../services/supabaseClient";
+import { useIndonesianTts } from "../../composables/useIndonesianTts";
 
 // Impor state reaktif dari store aplikasi
 import {
@@ -13,17 +14,30 @@ import {
   getQueueByServiceId,
   getQueueStatusLabel,
   loadOrganizerState,
-  subscribeToServiceQueue,
+  subscribeToEventQueues,
   eventQueues,
   initSyncChannel,
   organizerAccount,
 } from "../../data/appStore";
+import type { QueueState } from "../../data/appStore";
+
+type QueuedAnnouncement = {
+  serviceId: number;
+  text: string;
+};
+
+const ANNOUNCEMENT_GAP_MS = 5000;
 
 // Waktu Real-time untuk Header
 const currentTime = ref("");
 let timer: number;
-let unsubscribeQueue: (() => void) | null = null;
+let announcementGapTimer: number | null = null;
+let resolveAnnouncementGap: (() => void) | null = null;
+let unsubscribeQueues: (() => void) | null = null;
 let unsubscribeConfig: (() => void) | null = null;
+const announcementQueue = ref<QueuedAnnouncement[]>([]);
+const isAnnouncementPlaying = ref(false);
+const { speakAsync, stop } = useIndonesianTts();
 
 const subscribeToActiveService = (userId: string) => {
   const channel = supabase
@@ -41,11 +55,7 @@ const subscribeToActiveService = (userId: string) => {
         const newServiceId = (payload.new as any).active_service_id;
         if (!newServiceId) return;
 
-        // 1. Ganti subscription realtime untuk queue baru
-        unsubscribeQueue?.();
-        unsubscribeQueue = subscribeToServiceQueue(newServiceId);
-
-        // 2. Fetch antrean segar dari database untuk menghindari Stale Data
+        // Fetch antrean segar dari database untuk menghindari Stale Data
         const { data: freshQueue } = await supabase
           .from("queues")
           .select("*")
@@ -66,7 +76,7 @@ const subscribeToActiveService = (userId: string) => {
           }
         }
 
-        // 3. Update active ID (akan memicu pembaruan UI via computed Vue)
+        // Update active ID (akan memicu pembaruan UI via computed Vue)
         activeDisplayServiceId.value = newServiceId;
       },
     )
@@ -78,6 +88,73 @@ const subscribeToActiveService = (userId: string) => {
 };
 
 const activeDisplayServiceId = ref<number>(0);
+
+const buildAnnouncement = (queue: QueueState): QueuedAnnouncement | null => {
+  if (queue.status !== "serving" || queue.currentNumber <= 0) return null;
+
+  const service = eventServices.value.find((s) => s.id === queue.serviceId);
+  if (!service) return null;
+
+  return {
+    serviceId: queue.serviceId,
+    text: [
+      `Nomor antrean ${service.prefix} ${queue.currentNumber}.`,
+      `Silakan menuju ${servicePointName.value}.`,
+      `Layanan ${service.name}.`,
+    ].join(" "),
+  };
+};
+
+const clearAnnouncementGap = () => {
+  if (announcementGapTimer !== null) {
+    clearTimeout(announcementGapTimer);
+    announcementGapTimer = null;
+  }
+
+  resolveAnnouncementGap?.();
+  resolveAnnouncementGap = null;
+};
+
+const waitForNextAnnouncementSlot = () =>
+  new Promise<void>((resolve) => {
+    clearAnnouncementGap();
+
+    resolveAnnouncementGap = resolve;
+    announcementGapTimer = window.setTimeout(() => {
+      announcementGapTimer = null;
+      resolveAnnouncementGap = null;
+      resolve();
+    }, ANNOUNCEMENT_GAP_MS);
+  });
+
+const playNextAnnouncement = async () => {
+  if (isAnnouncementPlaying.value) return;
+
+  const nextAnnouncement = announcementQueue.value.shift();
+  if (!nextAnnouncement) return;
+
+  isAnnouncementPlaying.value = true;
+  activeDisplayServiceId.value = nextAnnouncement.serviceId;
+
+  try {
+    await speakAsync(nextAnnouncement.text);
+  } finally {
+    if (announcementQueue.value.length > 0) {
+      await waitForNextAnnouncementSlot();
+    }
+
+    isAnnouncementPlaying.value = false;
+    void playNextAnnouncement();
+  }
+};
+
+const enqueueAnnouncement = (queue: QueueState) => {
+  const announcement = buildAnnouncement(queue);
+  if (!announcement) return;
+
+  announcementQueue.value.push(announcement);
+  void playNextAnnouncement();
+};
 
 onMounted(async () => {
   await loadOrganizerState();
@@ -100,7 +177,13 @@ onMounted(async () => {
 
   if (initialServiceId) {
     activeDisplayServiceId.value = initialServiceId;
-    unsubscribeQueue = subscribeToServiceQueue(initialServiceId);
+  }
+
+  if (currentEvent.value.id) {
+    unsubscribeQueues = subscribeToEventQueues(
+      currentEvent.value.id,
+      enqueueAnnouncement,
+    );
   }
 
   // Mulai dengerin perubahan service dari operator
@@ -113,10 +196,6 @@ onMounted(async () => {
   initSyncChannel(userId, (newServiceId) => {
     // 1. Ganti variabel ID layanan di layar UI seketika
     activeDisplayServiceId.value = newServiceId;
-
-    // 2. Matikan realtime antrean lama, hidupkan realtime antrean baru
-    if (unsubscribeQueue) unsubscribeQueue();
-    unsubscribeQueue = subscribeToServiceQueue(newServiceId);
   });
 
   // Timer jam
@@ -132,8 +211,11 @@ onMounted(async () => {
 
 onUnmounted(() => {
   clearInterval(timer);
-  unsubscribeQueue?.(); // ← cleanup
-  unsubscribeConfig?.(); // ← cleanup
+  stop();
+  clearAnnouncementGap();
+  announcementQueue.value = [];
+  unsubscribeQueues?.();
+  unsubscribeConfig?.();
 });
 
 const displayService = computed(

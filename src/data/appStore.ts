@@ -835,6 +835,42 @@ export const subscribeToServiceQueue = (serviceId: number) => {
   };
 };
 
+export const subscribeToEventQueues = (
+  eventId: string,
+  onQueueUpdated?: (queue: QueueState) => void,
+) => {
+  const channel = supabase
+    .channel(`queues-event:${eventId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "UPDATE",
+        schema: "public",
+        table: "queues",
+        filter: `event_id=eq.${eventId}`,
+      },
+      (payload) => {
+        const updated = mapQueue(payload.new as unknown as DbQueue);
+        const idx = eventQueues.value.findIndex(
+          (q) => q.serviceId === updated.serviceId,
+        );
+
+        if (idx !== -1) {
+          eventQueues.value[idx] = updated;
+        } else {
+          eventQueues.value.push(updated);
+        }
+
+        onQueueUpdated?.(updated);
+      },
+    )
+    .subscribe();
+
+  return () => {
+    void supabase.removeChannel(channel);
+  };
+};
+
 export const subscribeToServiceUpdate = (eventId: string) => {
   const channel = supabase
     .channel(`services-event:${eventId}`)

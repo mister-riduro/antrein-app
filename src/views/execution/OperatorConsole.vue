@@ -37,7 +37,6 @@ import {
   organizerAccount,
   subscribeToAllEventTickets,
 } from "../../data/appStore.ts";
-import { useIndonesianTts } from "../../composables/useIndonesianTts.ts";
 import { useToast } from "../../composables/useToast.ts";
 import ConfirmationDialog from "../../components/ui/ConfirmationDialog.vue";
 
@@ -62,7 +61,6 @@ const activeQueue = computed(() => getQueueByServiceId(activeServiceId.value));
 const isActiveQueueClosed = computed(
   () => activeQueue.value.status === "closed",
 );
-const { speak, stop } = useIndonesianTts();
 const switchService = async (serviceId: number) => {
   selectedServiceId.value = serviceId; // ← ini yang trigger watch di PublicDisplay
   try {
@@ -110,21 +108,6 @@ const formatQueueNumber = (serviceId: number, prefix: string) => {
   return `${prefix}-${num}`;
 };
 
-const buildAnnouncementText = () => {
-  if (!activeService.value) return "";
-
-  return [
-    `Nomor antrean ${activeService.value.prefix} ${activeQueue.value.currentNumber}.`,
-    `Silakan menuju ${servicePointName.value}.`,
-    `Layanan ${activeService.value.name}.`,
-  ].join(" ");
-};
-
-const announceCurrentNumber = () => {
-  stop();
-  speak(buildAnnouncementText());
-};
-
 const handleCallNextNumber = async () => {
   // Tambahkan pelindung isProcessing.value
   if (isActiveQueueClosed.value || isProcessing.value) return;
@@ -132,7 +115,6 @@ const handleCallNextNumber = async () => {
   try {
     isProcessing.value = true; // Kunci tombol
     await callNextNumber(activeServiceId.value);
-    announceCurrentNumber();
   } finally {
     isProcessing.value = false; // Buka kembali tombol
   }
@@ -144,7 +126,6 @@ const handleRecallNumber = async () => {
   try {
     isProcessing.value = true;
     await recallNumber(activeServiceId.value);
-    announceCurrentNumber();
   } finally {
     isProcessing.value = false;
   }
@@ -155,7 +136,6 @@ const handleFinishServingNumber = async () => {
 
   try {
     isProcessing.value = true;
-    stop();
     await finishServingNumber(activeServiceId.value);
     toast.success(
       "Selesai Dilayani",
@@ -178,7 +158,6 @@ const handleSkipNumber = async () => {
 
   try {
     isProcessing.value = true;
-    stop(); // Hentikan suara panggilan TTS
 
     await skipServingNumber(activeServiceId.value);
 
@@ -202,7 +181,6 @@ const openCloseCounterDialog = () => {
 };
 
 const confirmCloseCounter = async () => {
-  stop();
   await closeCounter(activeServiceId.value);
   toast.success(
     `${servicePointConfig.value.label} ditutup`,

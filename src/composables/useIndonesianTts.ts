@@ -156,15 +156,7 @@ export const useIndonesianTts = () => {
     cleanupAudio();
     window.speechSynthesis.cancel();
 
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = selectedVoice.value?.lang || INDONESIAN_LANG;
-    utterance.rate = settings.rate;
-    utterance.pitch = settings.pitch;
-    utterance.volume = settings.volume;
-
-    if (selectedVoice.value) {
-      utterance.voice = selectedVoice.value;
-    }
+    const utterance = createBrowserUtterance(text);
 
     utterance.onstart = () => {
       isSpeaking.value = true;
@@ -186,6 +178,20 @@ export const useIndonesianTts = () => {
 
     window.speechSynthesis.speak(utterance);
     return true;
+  };
+
+  const createBrowserUtterance = (text: string) => {
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = selectedVoice.value?.lang || INDONESIAN_LANG;
+    utterance.rate = settings.rate;
+    utterance.pitch = settings.pitch;
+    utterance.volume = settings.volume;
+
+    if (selectedVoice.value) {
+      utterance.voice = selectedVoice.value;
+    }
+
+    return utterance;
   };
 
   // ← Direfactor: handle SDK error format, bukan HTTP Response
@@ -246,19 +252,22 @@ export const useIndonesianTts = () => {
 
       if (error) throw error;
 
+      cleanupAudio();
       const audioBlob = new Blob([data], { type: "audio/mpeg" });
-      const audioUrl = URL.createObjectURL(audioBlob);
-
-      const audio = new Audio(audioUrl);
+      currentAudioUrl = URL.createObjectURL(audioBlob);
+      currentAudio = new Audio(currentAudioUrl);
 
       // Sesuaikan nada dan kecepatan berdasarkan settings lokal pengguna
-      audio.playbackRate = settings.rate;
+      currentAudio.playbackRate = settings.rate;
       // (Note: pengubahan pitch via HTML5 Audio agak kompleks, biasanya diabaikan atau ditangani di sisi ElevenLabs)
+      currentAudio.onended = cleanupAudio;
 
-      audio.play();
+      await currentAudio.play();
+      return true;
     } catch (err) {
       console.error("Gagal memutar suara:", err);
       toast.error("Gagal Memutar Suara", getElevenLabsErrorMessage(err));
+      return false;
     }
   };
 
@@ -284,6 +293,81 @@ export const useIndonesianTts = () => {
     }
 
     return speakWithBrowser(text);
+  };
+
+  const speakAsync = async (text: string) => {
+    if (!settings.enabled) {
+      toast.info(
+        "Suara pemanggilan dimatikan",
+        "Aktifkan kembali dari halaman Pengaturan jika ingin memakai audio.",
+      );
+      return false;
+    }
+
+    if (!text.trim()) {
+      toast.warning(
+        "Teks pemanggilan kosong",
+        "Tidak ada kalimat yang bisa dibacakan.",
+      );
+      return false;
+    }
+
+    if (settings.provider === "elevenlabs") {
+      const didStart = await speakWithElevenLabs(text);
+      if (!didStart || !currentAudio) return didStart;
+
+      isSpeaking.value = true;
+      return new Promise<boolean>((resolve) => {
+        if (!currentAudio) {
+          resolve(false);
+          return;
+        }
+
+        currentAudio.onended = () => {
+          isSpeaking.value = false;
+          cleanupAudio();
+          resolve(true);
+        };
+        currentAudio.onerror = () => {
+          isSpeaking.value = false;
+          cleanupAudio();
+          resolve(false);
+        };
+      });
+    }
+
+    if (!isSupported) {
+      toast.error(
+        "Browser tidak mendukung suara",
+        "Gunakan Chrome, Edge, atau browser modern lain untuk text-to-speech.",
+      );
+      return false;
+    }
+
+    cleanupAudio();
+    window.speechSynthesis.cancel();
+
+    const utterance = createBrowserUtterance(text);
+
+    return new Promise<boolean>((resolve) => {
+      utterance.onstart = () => {
+        isSpeaking.value = true;
+      };
+      utterance.onend = () => {
+        isSpeaking.value = false;
+        resolve(true);
+      };
+      utterance.onerror = () => {
+        isSpeaking.value = false;
+        toast.error(
+          "Gagal memutar suara",
+          "Browser tidak berhasil membacakan antrean. Coba pilih suara lain di Pengaturan.",
+        );
+        resolve(false);
+      };
+
+      window.speechSynthesis.speak(utterance);
+    });
   };
 
   const stop = () => {
@@ -327,6 +411,7 @@ export const useIndonesianTts = () => {
     selectedVoice,
     settings,
     speak,
+    speakAsync,
     statusLabel,
     stop,
   };
