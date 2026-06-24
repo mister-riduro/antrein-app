@@ -787,6 +787,27 @@ export const subscribeToServiceQueue = (serviceId: number) => {
     };
   }
 
+  // INITIAL FETCH: Pastikan data antrian sudah ada di memori saat pertama kali
+  // dibuka (misal: TeamConsole di HP yang tidak punya state Organizer).
+  // Tanpa ini, eventQueues kosong dan tampilan tidak akan menampilkan data apapun
+  // sampai ada perubahan realtime berikutnya.
+  void supabase
+    .from("queues")
+    .select("*")
+    .eq("service_id", serviceId)
+    .maybeSingle()
+    .then(({ data }) => {
+      if (!data) return;
+      const idx = eventQueues.value.findIndex(
+        (q) => q.serviceId === data.service_id,
+      );
+      if (idx !== -1) {
+        eventQueues.value[idx] = mapQueue(data as DbQueue);
+      } else {
+        eventQueues.value.push(mapQueue(data as DbQueue));
+      }
+    });
+
   const channel = supabase
     .channel(channelName)
     .on(
